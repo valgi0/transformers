@@ -21,11 +21,13 @@ from typing import TYPE_CHECKING
 from ...file_utils import _BaseLazyModule, is_tf_available, is_tokenizers_available, is_torch_available
 
 _import_structure = {
-    "distilbert.configuration_distilbert_performer": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DistilBertPerformerConfig"],
+    "distilbert.configuration_distilbert_performer": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+                                                      "DistilBertPerformerConfig"],
     "bert.configuration_bert_performer": ["BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BertPerformerConfig"],
     "t5.configuration_t5_performer": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5PerformerConfig"],
+    "wav2vec2.configuration_wav2vec2_performer": ["WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+                                                  "Wav2vec2PerformerConfig"]
 }
-
 
 if is_torch_available():
     _import_structure["distilbert.modeling_distilbert_performer"] = [
@@ -56,6 +58,14 @@ if is_torch_available():
         "T5PerformerForConditionalGeneration",
         "T5PerformerModel",
         "T5PerformerPreTrainedModel",
+    ]
+
+    _import_structure["wav2vec2.modeling_wav2vec2_performer"] = [
+        "WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "Wav2Vec2PerformerForCTC",
+        "Wav2Vec2PerformerForMaskedLM",
+        "Wav2Vec2PerformerModel",
+        "Wav2Vec2PerformerPreTrainedModel",
     ]
 
 if is_tf_available():
@@ -91,9 +101,9 @@ if is_tf_available():
         "TFT5PerformerPreTrainedModel",
     ]
 
-
 if TYPE_CHECKING:
-    from distilbert.configuration_distilbert_performer import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertPerformerConfig
+    from distilbert.configuration_distilbert_performer import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, \
+        DistilBertPerformerConfig
     from bert.configuration_bert_performer import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertPerformerConfig
 
     if is_torch_available():
@@ -122,7 +132,13 @@ if TYPE_CHECKING:
             T5PerformerEncoderModel,
             T5PerformerForConditionalGeneration,
             T5PerformerModel,
-            T5PerformerPreTrainedModel
+            T5PerformerPreTrainedModel,
+        )
+        from wav2vec2.modeling_wav2vec2_performer import (
+            Wav2Vec2PerformerForCTC,
+            Wav2Vec2PerformerForMaskedLM,
+            Wav2Vec2PerformerModel,
+            Wav2Vec2PerformerPreTrainedModel,
         )
 
     if is_tf_available():
@@ -161,6 +177,7 @@ else:
     import os
     import sys
 
+
     class _LazyModule(_BaseLazyModule):
         """
         Module class that surfaces all objects but only performs associated imports when the objects are requested.
@@ -171,5 +188,6 @@ else:
 
         def _get_module(self, module_name: str):
             return importlib.import_module("." + module_name, self.__name__)
+
 
     sys.modules[__name__] = _LazyModule(__name__, _import_structure)
