@@ -233,6 +233,13 @@ class RagPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        # At the moment fast initialization is not supported
+        # for composite models
+        kwargs["_fast_init"] = False
+        return super().from_pretrained(*args, **kwargs)
+
+    @classmethod
     def from_pretrained_question_encoder_generator(
         cls,
         question_encoder_pretrained_model_name_or_path: str = None,
@@ -494,9 +501,7 @@ class RagModel(RagPreTrainedModel):
                 question_encoder.config, generator.config, **kwargs
             )
         else:
-            assert isinstance(config, self.config_class), "config: {} has to be of type {}".format(
-                config, self.config_class
-            )
+            assert isinstance(config, self.config_class), f"config: {config} has to be of type {self.config_class}"
         super().__init__(config)
         if question_encoder is None:
             from ..auto.modeling_auto import AutoModel
@@ -550,10 +555,8 @@ class RagModel(RagPreTrainedModel):
             >>> # initialize with RagRetriever to do everything in one forward call
             >>> model = RagModel.from_pretrained("facebook/rag-token-base", retriever=retriever)
 
-            >>> input_dict = tokenizer.prepare_seq2seq_batch("How many people live in Paris?", "In Paris, there are 10 million people.", return_tensors="pt")
-            >>> input_ids = input_dict["input_ids"]
-            >>> outputs = model(input_ids=input_ids)
-
+            >>> inputs = tokenizer("How many people live in Paris?", return_tensors="pt")
+            >>> outputs = model(input_ids=inputs["input_ids"])
         """
         n_docs = n_docs if n_docs is not None else self.config.n_docs
         use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -752,9 +755,12 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             >>> # initialize with RagRetriever to do everything in one forward call
             >>> model = RagSequenceForGeneration.from_pretrained("facebook/rag-token-nq", retriever=retriever)
 
-            >>> input_dict = tokenizer.prepare_seq2seq_batch("How many people live in Paris?", "In Paris, there are 10 million people.", return_tensors="pt")
-            >>> input_ids = input_dict["input_ids"]
-            >>> outputs = model(input_ids=input_ids, labels=input_dict["labels"])
+            >>> inputs = tokenizer("How many people live in Paris?", return_tensors="pt")
+            >>> with tokenizer.as_target_tokenizer():
+            ...    targets = tokenizer("In Paris, there are 10 million people.", return_tensors="pt")
+            >>> input_ids = inputs["input_ids"]
+            >>> labels = targets["input_ids"]
+            >>> outputs = model(input_ids=input_ids, labels=labels)
 
             >>> # or use retriever separately
             >>> model = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", use_dummy_dataset=True)
@@ -764,7 +770,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             >>> docs_dict = retriever(input_ids.numpy(), question_hidden_states.detach().numpy(), return_tensors="pt")
             >>> doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2)).squeeze(1)
             >>> # 3. Forward to generator
-            >>> outputs = model(context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=doc_scores, decoder_input_ids=input_dict["labels"])
+            >>> outputs = model(context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=doc_scores, decoder_input_ids=labels)
         """
         n_docs = n_docs if n_docs is not None else self.config.n_docs
         exclude_bos_score = exclude_bos_score if exclude_bos_score is not None else self.config.exclude_bos_score
@@ -1203,9 +1209,12 @@ class RagTokenForGeneration(RagPreTrainedModel):
             >>> # initialize with RagRetriever to do everything in one forward call
             >>> model = RagTokenForGeneration.from_pretrained("facebook/rag-token-nq", retriever=retriever)
 
-            >>> input_dict = tokenizer.prepare_seq2seq_batch("How many people live in Paris?", "In Paris, there are 10 million people.", return_tensors="pt")
-            >>> input_ids = input_dict["input_ids"]
-            >>> outputs = model(input_ids=input_ids, labels=input_dict["labels"])
+            >>> inputs = tokenizer("How many people live in Paris?", return_tensors="pt")
+            >>> with tokenizer.as_target_tokenizer():
+            ...    targets = tokenizer("In Paris, there are 10 million people.", return_tensors="pt")
+            >>> input_ids = inputs["input_ids"]
+            >>> labels = targets["input_ids"]
+            >>> outputs = model(input_ids=input_ids, labels=labels)
 
             >>> # or use retriever separately
             >>> model = RagTokenForGeneration.from_pretrained("facebook/rag-token-nq", use_dummy_dataset=True)
@@ -1215,7 +1224,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             >>> docs_dict = retriever(input_ids.numpy(), question_hidden_states.detach().numpy(), return_tensors="pt")
             >>> doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), docs_dict["retrieved_doc_embeds"].float().transpose(1, 2)).squeeze(1)
             >>> # 3. Forward to generator
-            >>> outputs = model(context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=doc_scores, decoder_input_ids=input_dict["labels"])
+            >>> outputs = model(context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=doc_scores, decoder_input_ids=labels)
 
             >>> # or directly generate
             >>> generated = model.generate(context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=doc_scores)
@@ -1312,6 +1321,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]] = None,
         forced_bos_token_id: Optional[int] = None,
         forced_eos_token_id: Optional[int] = None,
+        remove_invalid_values: Optional[bool] = None,
         **model_kwargs
     ):
         """
@@ -1408,6 +1418,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 needs to be the target language token.
             forced_eos_token_id (:obj:`int`, `optional`):
                 The id of the token to force as the last generated token when :obj:`max_length` is reached.
+            remove_invalid_values (:obj:`bool`, `optional`):
+                Whether to remove possible `nan` and `inf` outputs of the model to prevent the generation method to
+                crash. Note that using ``remove_invalid_values`` can slow down generation.
 
         Return:
             :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated
@@ -1430,6 +1443,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
             decoder_start_token_id
             if decoder_start_token_id is not None
             else self.config.generator.decoder_start_token_id
+        )
+        remove_invalid_values = (
+            remove_invalid_values if remove_invalid_values is not None else self.config.remove_invalid_values
         )
 
         # retrieve docs
@@ -1511,6 +1527,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             num_beams=num_beams,
             num_beam_groups=num_beam_groups,
             diversity_penalty=diversity_penalty,
+            remove_invalid_values=remove_invalid_values,
         )
 
         if num_beams == 1:
@@ -1533,7 +1550,6 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
             beam_scorer = BeamSearchScorer(
                 batch_size=batch_size,
-                max_length=max_length,
                 num_beams=num_beams,
                 device=self.device,
                 length_penalty=length_penalty,

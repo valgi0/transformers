@@ -149,11 +149,30 @@ So if you don't have any specific environment variable set, the cache directory 
 (``PYTORCH_TRANSFORMERS_CACHE`` or ``PYTORCH_PRETRAINED_BERT_CACHE``), those will be used if there is no shell
 environment variable for ``TRANSFORMERS_CACHE``.
 
-### Note on model downloads (Continuous Integration or large-scale deployments)
+### Offline mode
 
-If you expect to be downloading large volumes of models (more than 1,000) from our hosted bucket (for instance through
-your CI setup, or a large-scale production deployment), please cache the model files on your end. It will be way
-faster, and cheaper. Feel free to contact us privately if you need any help.
+It's possible to run 🤗 Transformers in a firewalled or a no-network environment.
+
+Setting environment variable `TRANSFORMERS_OFFLINE=1` will tell 🤗 Transformers to use local files only and will not try to look things up.
+
+Most likely you may want to couple this with `HF_DATASETS_OFFLINE=1` that performs the same for 🤗 Datasets if you're using the latter.
+
+Here is an example of how this can be used on a filesystem that is shared between a normally networked and a firewalled to the external world instances.
+
+On the instance with the normal network run your program which will download and cache models (and optionally datasets if you use 🤗 Datasets). For example:
+
+```
+python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
+```
+
+and then with the same filesystem you can now run the same program on a firewalled instance:
+```
+HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+python examples/pytorch/translation/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
+```
+and it should succeed without any hanging waiting to timeout.
+
+
 
 ## Do you want to run a Transformer model on a mobile device?
 

@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import os
 import unittest
 
@@ -34,6 +33,7 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     rust_tokenizer_class = ReformerTokenizerFast
     test_rust_tokenizer = True
     test_seq2seq = False
+    test_sentencepiece = True
 
     def setUp(self):
         super().setUp()
@@ -65,7 +65,7 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_padding(self, max_length=15):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest("{} ({})".format(tokenizer.__class__.__name__, pretrained_name)):
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
                 # Simple input

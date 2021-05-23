@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import os
 import unittest
 
@@ -34,6 +33,7 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = XLMRobertaTokenizer
     rust_tokenizer_class = XLMRobertaTokenizerFast
     test_rust_tokenizer = True
+    test_sentencepiece = True
 
     def setUp(self):
         super().setUp()
