@@ -337,7 +337,7 @@ class Wav2Vec2Attention(nn.Module):
         attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
 
         attn_output = self.performer_attention(query_states, key_states,
-                                               value_states, attention_mask, output_attentions)
+                                               value_states, attention_mask) #, output_attentions)
         # attn_output = torch.bmm(attn_probs, value_states)
 
         assert attn_output.size() == (
