@@ -705,7 +705,12 @@ if is_torch_available():
             "BertPerformerForSequenceClassification",
             "BertPerformerForTokenClassification",
             "BertPerformerModel",
+            "WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
             "BertPerformerPreTrainedModel",
+            "Wav2Vec2PerformerForCTC",
+            "Wav2Vec2PerformerForMaskedLM",
+            "Wav2Vec2PerformerModel",
+            "Wav2Vec2PerformerPreTrainedModel",
         ]
     )
     _import_structure["models.prophetnet"].extend(
