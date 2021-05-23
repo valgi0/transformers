@@ -229,10 +229,10 @@ class Wav2Vec2Attention(nn.Module):
         self.scaling = self.head_dim ** -0.5
         self.is_decoder = config.is_decoder
 
-        self.k_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.bias)
-        self.v_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.bias)
-        self.q_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.bias)
-        self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.bias)
+        self.k_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
+        self.v_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
+        self.q_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
+        self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
         self.performer_attention = PerformerAttention(config.performer_attention_config)
         if self.is_decoder:
             config.performer_attention_config["causal"] = True
