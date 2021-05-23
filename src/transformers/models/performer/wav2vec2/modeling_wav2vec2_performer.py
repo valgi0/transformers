@@ -14,7 +14,6 @@
 # limitations under the License.
 """ PyTorch Wav2Vec2 model. """
 
-
 import warnings
 from typing import Optional, Tuple
 
@@ -24,7 +23,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ....activations import ACT2FN
-from ....file_utils import (add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings )
+from ....file_utils import (add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings)
 from ....modeling_outputs import BaseModelOutput, CausalLMOutput, MaskedLMOutput
 from ....modeling_utils import PreTrainedModel
 from ....utils import logging
@@ -207,17 +206,17 @@ class Wav2Vec2Attention(nn.Module):
     def __init__(
             self,
             config
-            #embed_dim: int,
-            #num_heads: int,
-            #dropout: float = 0.0,
-            #is_decoder: bool = False,
-            #bias: bool = True,
+            # embed_dim: int,
+            # num_heads: int,
+            # dropout: float = 0.0,
+            # is_decoder: bool = False,
+            # bias: bool = True,
     ):
         super().__init__()
-        #embed_dim=config.hidden_size,
-        #num_heads=config.num_attention_heads,
-        #dropout=config.hidden_dropout_prob,
-        #is_decoder=False,
+        # embed_dim=config.hidden_size,
+        # num_heads=config.num_attention_heads,
+        # dropout=config.hidden_dropout_prob,
+        # is_decoder=False,
 
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
@@ -230,10 +229,10 @@ class Wav2Vec2Attention(nn.Module):
         self.scaling = self.head_dim ** -0.5
         self.is_decoder = config.is_decoder
 
-        self.k_proj = nn.Linear(config.hidden_size, config.hidden_size, bias= config.bias)
-        self.v_proj = nn.Linear(config.hidden_size, config.hidden_size, bias= config.bias)
-        self.q_proj = nn.Linear(config.hidden_size, config.hidden_size, bias= config.bias)
-        self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias= config.bias)
+        self.k_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.bias)
+        self.v_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.bias)
+        self.q_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.bias)
+        self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.bias)
         self.performer_attention = PerformerAttention(config.performer_attention_config)
         if self.is_decoder:
             config.performer_attention_config["causal"] = True
@@ -316,7 +315,7 @@ class Wav2Vec2Attention(nn.Module):
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-        attn_weights = F.softmax(attn_weights, dim=-1)
+        # attn_weights = F.softmax(attn_weights, dim=-1)
 
         if layer_head_mask is not None:
             assert layer_head_mask.size() == (
@@ -339,7 +338,7 @@ class Wav2Vec2Attention(nn.Module):
 
         attn_output = self.performer_attention(query_states, key_states,
                                                value_states, attention_mask, output_attentions)
-       # attn_output = torch.bmm(attn_probs, value_states)
+        # attn_output = torch.bmm(attn_probs, value_states)
 
         assert attn_output.size() == (
             bsz * self.num_heads,
@@ -395,10 +394,10 @@ class Wav2Vec2EncoderLayer(nn.Module):
         super().__init__()
         self.attention = Wav2Vec2Attention(
             config
-            #embed_dim=config.hidden_size,
-            #num_heads=config.num_attention_heads,
-            #dropout=config.hidden_dropout_prob,
-            #is_decoder=False
+            # embed_dim=config.hidden_size,
+            # num_heads=config.num_attention_heads,
+            # dropout=config.hidden_dropout_prob,
+            # is_decoder=False
         )
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -423,13 +422,13 @@ class Wav2Vec2EncoderLayer(nn.Module):
 class Wav2Vec2EncoderLayerStableLayerNorm(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention = Wav2Vec2Attention( config
-           #embed_dim=config.hidden_size,
-           #num_heads=config.num_attention_heads,
-           #dropout=config.hidden_dropout_prob,
-            #is_decoder=False,
+        self.attention = Wav2Vec2Attention(config
+                                           # embed_dim=config.hidden_size,
+                                           # num_heads=config.num_attention_heads,
+                                           # dropout=config.hidden_dropout_prob,
+                                           # is_decoder=False,
 
-        )
+                                           )
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.feed_forward = Wav2Vec2FeedForward(config)
@@ -626,7 +625,6 @@ WAV_2_VEC_2_START_DOCSTRING = r"""
             configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
             weights.
 """
-
 
 WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
     Args:

@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_tf_available, is_tokenizers_available, is_torch_available
+from ...file_utils import _BaseLazyModule, is_tf_available, is_torch_available
 
 _import_structure = {
     "distilbert.configuration_distilbert_performer": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -135,6 +135,7 @@ if TYPE_CHECKING:
             T5PerformerPreTrainedModel,
         )
         from wav2vec2.modeling_wav2vec2_performer import (
+            WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             Wav2Vec2PerformerForCTC,
             Wav2Vec2PerformerForMaskedLM,
             Wav2Vec2PerformerModel,
