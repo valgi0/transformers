@@ -233,7 +233,7 @@ class Wav2Vec2Attention(nn.Module):
         self.v_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
         self.q_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
-        self.performer_attention = PerformerAttention(config.performer_attention_config)
+
         if self.is_decoder:
             config.performer_attention_config["causal"] = True
             self.performer_attention = PerformerAttention(config.performer_attention_config)
@@ -299,23 +299,20 @@ class Wav2Vec2Attention(nn.Module):
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
-        assert attn_weights.size() == (
-            bsz * self.num_heads,
-            tgt_len,
-            src_len,
-        ), f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
+            raise ValueError(
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+            )
 
         if attention_mask is not None:
-            assert attention_mask.size() == (
-                bsz,
-                1,
-                tgt_len,
-                src_len,
-            ), f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
+                raise ValueError(
+                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+                )
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-        # attn_weights = F.softmax(attn_weights, dim=-1)
+         #attn_weights = F.softmax(attn_weights, dim=-1)
 
         if layer_head_mask is not None:
             assert layer_head_mask.size() == (
@@ -334,23 +331,23 @@ class Wav2Vec2Attention(nn.Module):
         else:
             attn_weights_reshaped = None
 
-        attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
+        #attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
 
         attn_output = self.performer_attention(query_states, key_states,
-                                               value_states, attention_mask) #, output_attentions)
+                                               value_states, attention_mask, output_attentions)
         # attn_output = torch.bmm(attn_probs, value_states)
 
-        assert attn_output.size() == (
-            bsz * self.num_heads,
-            tgt_len,
-            self.head_dim,
-        ), f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
+        # assert attn_output.size() == (
+        #     bsz * self.num_heads,
+        #     tgt_len,
+        #     self.head_dim,
+        # ), f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
 
-        attn_output = (
-            attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-                .transpose(1, 2)
-                .reshape(bsz, tgt_len, embed_dim)
-        )
+        # attn_output = (
+        #     attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
+        #         .transpose(1, 2)
+        #         .reshape(bsz, tgt_len, embed_dim)
+        # )
 
         attn_output = self.out_proj(attn_output)
 
