@@ -258,8 +258,8 @@ class Wav2Vec2Attention(nn.Module):
         # for the decoder
         is_cross_attention = key_value_states is not None
         bsz, tgt_len, embed_dim = hidden_states.size()
-        print('[DEBUG] Wav2vecAttention forward input')
-        print(f'[DEBUG]: hidden_states: {hidden_states.shape},')
+        #print('[DEBUG] Wav2vecAttention forward input')
+        #print(f'[DEBUG]: hidden_states: {hidden_states.shape},')
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
@@ -334,10 +334,10 @@ class Wav2Vec2Attention(nn.Module):
             attn_weights_reshaped = None
 
         #attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
-        print('[DEBUG]: In wav2vec2Attention ready to call performer_attention')
-        print(f'[DEBUG]: query: {query_states.shape},')
-        print(f'[DEBUG]: key: {key_states.shape},')
-        print(f'[DEBUG]: value: {value_states.shape},')
+        #print('[DEBUG]: In wav2vec2Attention ready to call performer_attention')
+        #print(f'[DEBUG]: query: {query_states.shape},')
+        #print(f'[DEBUG]: key: {key_states.shape},')
+        #print(f'[DEBUG]: value: {value_states.shape},')
         performer_shape_proj = (bsz, self.num_heads, -1, self.head_dim)
         query_states = query_states.view(*performer_shape_proj)
         key_states = key_states.view(*performer_shape_proj)
