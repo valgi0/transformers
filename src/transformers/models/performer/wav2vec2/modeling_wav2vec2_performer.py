@@ -744,8 +744,6 @@ class Wav2Vec2PerformerModel(Wav2Vec2PerformerPreTrainedModel):
         hidden_states = self.feature_projection(hidden_states)
 
         if input_values is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_values is not None:
             input_shape = input_values.size()
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
