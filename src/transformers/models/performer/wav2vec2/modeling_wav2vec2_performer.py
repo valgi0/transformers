@@ -332,7 +332,10 @@ class Wav2Vec2Attention(nn.Module):
             attn_weights_reshaped = None
 
         #attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
-
+        performer_shape_proj = (bsz, self.num_heads, -1, self.head_dim)
+        query_states = query_states.view(*performer_shape_proj)
+        key_states = key_states.view(*performer_shape_proj)
+        value_states = value_states.view(*performer_shape_proj)
         attn_output = self.performer_attention(query_states, key_states,
                                                value_states, attention_mask, output_attentions)
         # attn_output = torch.bmm(attn_probs, value_states)
@@ -343,11 +346,11 @@ class Wav2Vec2Attention(nn.Module):
         #     self.head_dim,
         # ), f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
 
-        # attn_output = (
-        #     attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-        #         .transpose(1, 2)
-        #         .reshape(bsz, tgt_len, embed_dim)
-        # )
+        attn_output = (
+            attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
+                .transpose(1, 2)
+                .reshape(bsz, tgt_len, embed_dim)
+        )
 
         attn_output = self.out_proj(attn_output)
 
