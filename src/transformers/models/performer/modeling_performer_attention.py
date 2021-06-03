@@ -189,6 +189,9 @@ class PerformerAttention(nn.Module):
             V': torch.tensor(bs, seq_length, dim)
         """
         # Apply the padding mask to K'. Also applying it to Q' would be redundant.
+        print('[DEBUG] Wcompute_attention_with_projected_queries_and_keys input')
+        print(f'[DEBUG]: hidden_states: {k_prime.shape},')
+        print(f'[DEBUG]: hidden_states: {mask.shape},')
         if mask is not None:
             k_prime *= mask
 

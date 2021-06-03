@@ -336,6 +336,8 @@ class Wav2Vec2Attention(nn.Module):
         query_states = query_states.view(*performer_shape_proj)
         key_states = key_states.view(*performer_shape_proj)
         value_states = value_states.view(*performer_shape_proj)
+        print('[DEBUG] Wav2vecAttention forward input')
+        print(f'[DEBUG]: Attention mask shape: {attention_mask.shape},')
         attn_output = self.performer_attention(query_states, key_states,
                                                value_states, attention_mask, output_attentions)
         # attn_output = torch.bmm(attn_probs, value_states)
@@ -741,9 +743,19 @@ class Wav2Vec2PerformerModel(Wav2Vec2PerformerPreTrainedModel):
 
         hidden_states = self.feature_projection(hidden_states)
 
+        if input_values is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_values is not None:
+            input_shape = input_values.size()
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+        # For Performer we want it to be of shape [bs, 1, seq_len, 1]
+        mask_reshape = [input_shape[0], 1, -1, 1] # Slight change in dimension for Performer Attention
+        extended_attention_mask = attention_mask.view(mask_reshape)
+
         encoder_outputs = self.encoder(
             hidden_states,
-            attention_mask=attention_mask,
+            attention_mask=extended_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
