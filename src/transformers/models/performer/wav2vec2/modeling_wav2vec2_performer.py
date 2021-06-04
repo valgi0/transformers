@@ -222,6 +222,7 @@ class Wav2Vec2Attention(nn.Module):
         self.num_heads = config.num_attention_heads
         self.dropout = config.hidden_dropout_prob
         self.head_dim = config.hidden_size // config.num_attention_heads
+        self.mask_reshape = config.mask_reshape
         assert (
                 self.head_dim * config.num_attention_heads == self.embed_dim
         ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} " \
@@ -333,7 +334,7 @@ class Wav2Vec2Attention(nn.Module):
         attn_weights_reshaped = None
         # attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
         performer_shape_proj = (bsz, self.num_heads, -1, self.head_dim)
-        attention_mask_shape_proj = (bsz, 1, -1, 1)   #bsz, 1, seq_len, 1
+        attention_mask_shape_proj = self.mask_reshape   #bsz, 1, seq_len, 1
         query_states = query_states.view(*performer_shape_proj)
         key_states = key_states.view(*performer_shape_proj)
         value_states = value_states.view(*performer_shape_proj)
@@ -481,7 +482,7 @@ class Wav2Vec2Encoder(nn.Module):
             # extend attention_mask
             attention_mask = (1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)) * -10000.0
             attention_mask = attention_mask.expand(
-                attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
+                attention_mask.shape[0], 1, attention_mask.shape[-1], 1
             )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
