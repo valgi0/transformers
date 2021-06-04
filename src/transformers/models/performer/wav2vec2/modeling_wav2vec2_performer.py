@@ -297,43 +297,43 @@ class Wav2Vec2Attention(nn.Module):
         value_states = value_states.view(*proj_shape)
 
         src_len = key_states.size(1)
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
+        #attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
-            )
+        #if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
+        #    raise ValueError(
+        #        f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+        #    )
 
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+        #if attention_mask is not None:
+        #    if attention_mask.size() != (bsz, 1, tgt_len, src_len):
+        #        raise ValueError(
+        #            f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+        #        )
+        #    attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
+        #    attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         # attn_weights = F.softmax(attn_weights, dim=-1)
 
-        if layer_head_mask is not None:
-            assert layer_head_mask.size() == (
-                self.num_heads,
-            ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+        #if layer_head_mask is not None:
+        #    assert layer_head_mask.size() == (
+        #        self.num_heads,
+        #    ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+        #    attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+        #    attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-        if output_attentions:
+        #if output_attentions:
             # this operation is a bit akward, but it's required to
             # make sure that attn_weights keeps its gradient.
             # In order to do so, attn_weights have to reshaped
             # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
-        else:
-            attn_weights_reshaped = None
+        #    attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+        #    attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+        #else:
+        #    attn_weights_reshaped = None
 
         # attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
         performer_shape_proj = (bsz, self.num_heads, -1, self.head_dim)
-        attention_mask_shape_proj = (bsz, self.num_heads, -1)
+        attention_mask_shape_proj = (bsz, 1, -1, 1)   #bsz, 1, seq_len, 1
         query_states = query_states.view(*performer_shape_proj)
         key_states = key_states.view(*performer_shape_proj)
         value_states = value_states.view(*performer_shape_proj)
