@@ -333,7 +333,7 @@ class Wav2Vec2Attention(nn.Module):
         #    attn_weights_reshaped = None
         attn_weights_reshaped = None
         # attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
-        performer_shape_proj = (bsz, tgt_len, -1)
+        performer_shape_proj = (bsz, tgt_len, -1, 1)
         attention_mask_shape_proj = (bsz, -1)  #bsz, 1, seq_len, 1
         query_states = query_states.view(*performer_shape_proj)
         key_states = key_states.view(*performer_shape_proj)
