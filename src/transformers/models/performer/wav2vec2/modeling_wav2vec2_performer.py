@@ -543,7 +543,7 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
             # extend attention_mask
             attention_mask = (1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)) * -10000.0
             attention_mask = attention_mask.expand(
-                attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
+                attention_mask.shape[0], 1, attention_mask.shape[-1], 1
             )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
