@@ -333,10 +333,11 @@ class Wav2Vec2Attention(nn.Module):
 
         # attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
         performer_shape_proj = (bsz, self.num_heads, -1, self.head_dim)
+        attention_mask_shape_proj = (bsz, self.num_heads, -1)
         query_states = query_states.view(*performer_shape_proj)
         key_states = key_states.view(*performer_shape_proj)
         value_states = value_states.view(*performer_shape_proj)
-        attention_mask = attention_mask.view(*performer_shape_proj)
+        attention_mask = attention_mask.view(*attention_mask_shape_proj)
         print('[DEBUG] Wav2vecAttention forward input')
         print(f'[DEBUG]: Attention mask shape: {attention_mask.shape},')
         attn_output = self.performer_attention(query_states, key_states,
