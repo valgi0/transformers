@@ -312,7 +312,7 @@ class Wav2Vec2Attention(nn.Module):
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-         #attn_weights = F.softmax(attn_weights, dim=-1)
+        # attn_weights = F.softmax(attn_weights, dim=-1)
 
         if layer_head_mask is not None:
             assert layer_head_mask.size() == (
@@ -331,7 +331,7 @@ class Wav2Vec2Attention(nn.Module):
         else:
             attn_weights_reshaped = None
 
-        #attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
+        # attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
         performer_shape_proj = (bsz, self.num_heads, -1, self.head_dim)
         query_states = query_states.view(*performer_shape_proj)
         key_states = key_states.view(*performer_shape_proj)
@@ -536,10 +536,14 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
             hidden_states[~attention_mask] = 0
 
             # extend attention_mask
-            attention_mask = (1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)) * -10000.0
-            attention_mask = attention_mask.expand(
-                attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
-            )
+            # attention_mask = (1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)) * -10000.0
+            # attention_mask = attention_mask.expand(
+            #     attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
+            # )
+
+          # For Performer we want it to be of shape [bs, 1, seq_len, 1] - extended attention mask
+            mask_reshape = [attention_mask.shape[0], 1, -1, 1] # Slight change in dimension for Performer Attention
+            attention_mask = attention_mask.view(mask_reshape)
 
         position_embeddings = self.pos_conv_embed(hidden_states)
         hidden_states = hidden_states + position_embeddings
@@ -743,17 +747,9 @@ class Wav2Vec2PerformerModel(Wav2Vec2PerformerPreTrainedModel):
 
         hidden_states = self.feature_projection(hidden_states)
 
-        if input_values is not None:
-            input_shape = input_values.size()
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-        # For Performer we want it to be of shape [bs, 1, seq_len, 1]
-        mask_reshape = [input_shape[0], 1, -1, 1] # Slight change in dimension for Performer Attention
-        extended_attention_mask = attention_mask.view(mask_reshape)
-
         encoder_outputs = self.encoder(
             hidden_states,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
