@@ -337,6 +337,8 @@ class Wav2Vec2Attention(nn.Module):
         query_states = query_states.view(*performer_shape_proj)
         key_states = key_states.view(*performer_shape_proj)
         value_states = value_states.view(*performer_shape_proj)
+        print(f'[DEBUG]: Query shape: {query_states.shape},')
+        print(f'[DEBUG]: Attention mask shape: {attention_mask.shape},')
         attention_mask = attention_mask.view(*attention_mask_shape_proj)
         print('[DEBUG] Wav2vecAttention forward input')
         print(f'[DEBUG]: Attention mask shape: {attention_mask.shape},')
