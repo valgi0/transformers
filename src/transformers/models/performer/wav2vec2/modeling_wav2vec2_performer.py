@@ -536,14 +536,10 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
             hidden_states[~attention_mask] = 0
 
             # extend attention_mask
-            # attention_mask = (1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)) * -10000.0
-            # attention_mask = attention_mask.expand(
-            #     attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
-            # )
-
-          # For Performer we want it to be of shape [bs, 1, seq_len, 1] - extended attention mask
-            mask_reshape = [attention_mask.shape[0], 1, -1, 1] # Slight change in dimension for Performer Attention
-            attention_mask = attention_mask.view(mask_reshape)
+            attention_mask = (1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)) * -10000.0
+            attention_mask = attention_mask.expand(
+                attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
+            )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
         hidden_states = hidden_states + position_embeddings
