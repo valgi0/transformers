@@ -319,7 +319,12 @@ class BertSelfAttention(nn.Module):
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
         #attention_probs = self.dropout(attention_probs)
-
+        print('[DEBUG] BertAttention forward input')
+        print(f'[DEBUG]: query_layer shape: {query_layer.shape},')
+        print(f'[DEBUG]: key_layer shape: {key_layer.shape},')
+        print(f'[DEBUG]: value_layer shape: {value_layer.shape},')
+        print(f'[DEBUG]: Attention mask shape: {attention_mask.shape},')
+        print(f'[DEBUG]: output_attentions shape: {output_attentions.shape},')
         context_layer = self.performer_attention(query_layer, key_layer, value_layer, attention_mask, output_attentions)
 
         # Mask heads if we want to
