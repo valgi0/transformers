@@ -338,11 +338,14 @@ class Wav2Vec2Attention(nn.Module):
         query_states = query_states.view(*performer_shape_proj)
         key_states = key_states.view(*performer_shape_proj)
         value_states = value_states.view(*performer_shape_proj)
-        print(f'[DEBUG]: Query shape: {query_states.shape},')
-        print(f'[DEBUG]: Attention mask shape: {attention_mask.shape},')
         attention_mask = attention_mask.view(*attention_mask_shape_proj)
+
         print('[DEBUG] Wav2vecAttention forward input')
+        print(f'[DEBUG]: query_layer shape: {query_layer.shape},')
+        print(f'[DEBUG]: key_layer shape: {key_layer.shape},')
+        print(f'[DEBUG]: value_layer shape: {value_layer.shape},')
         print(f'[DEBUG]: Attention mask shape: {attention_mask.shape},')
+        
         attn_output = self.performer_attention(query_states, key_states,
                                                value_states, attention_mask, output_attentions)
         # attn_output = torch.bmm(attn_probs, value_states)
