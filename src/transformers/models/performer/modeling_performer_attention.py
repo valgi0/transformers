@@ -143,6 +143,9 @@ class PerformerAttention(nn.Module):
             k_prime: torch.tensor(bs, seq_length, num_features)
         """
         # Instead of dividing the product QK^T by sqrt(d), we divide Q and K by the 4th root of d.
+        print('[DEBUG] get_projected_queries_and_keys input')
+        print(f'[DEBUG]: q: {q.shape},')
+        print(f'[DEBUG]: k: {k.shape},')
         q = q / (self.d_model ** 0.25)
         k = k / (self.d_model ** 0.25)
 
