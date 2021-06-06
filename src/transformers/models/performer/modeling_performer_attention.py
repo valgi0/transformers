@@ -114,6 +114,11 @@ class PerformerAttention(nn.Module):
             weights: torch.tensor(bs, num_heads, seq_length, seq_length) Attention weights context: torch.tensor(bs,
             seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
+        print('[DEBUG] PerformerAttention forward input')
+        print(f'[DEBUG]: query shape: {query.shape},')
+        print(f'[DEBUG]: key shape: {key.shape},')
+        print(f'[DEBUG]: value shape: {value.shape},')
+        print(f'[DEBUG]: mask shape: {mask.shape},')
         bs, q_length, _, _ = query.shape
 
         assert not output_attentions, "Can't output attention maps when using Performer attention."
@@ -190,8 +195,9 @@ class PerformerAttention(nn.Module):
         """
         # Apply the padding mask to K'. Also applying it to Q' would be redundant.
         print('[DEBUG] Wcompute_attention_with_projected_queries_and_keys input')
-        print(f'[DEBUG]: hidden_states: {k_prime.shape},')
-        print(f'[DEBUG]: hidden_states: {mask.shape},')
+        print(f'[DEBUG]: q_prime: {q_prime.shape},')
+        print(f'[DEBUG]: k_prime: {k_prime.shape},')
+        print(f'[DEBUG]: mask: {mask.shape},')
         if mask is not None:
             k_prime *= mask
 

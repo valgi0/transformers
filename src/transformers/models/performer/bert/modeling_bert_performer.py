@@ -324,7 +324,6 @@ class BertSelfAttention(nn.Module):
         print(f'[DEBUG]: key_layer shape: {key_layer.shape},')
         print(f'[DEBUG]: value_layer shape: {value_layer.shape},')
         print(f'[DEBUG]: Attention mask shape: {attention_mask.shape},')
-        print(f'[DEBUG]: output_attentions shape: {output_attentions.shape},')
         context_layer = self.performer_attention(query_layer, key_layer, value_layer, attention_mask, output_attentions)
 
         # Mask heads if we want to
