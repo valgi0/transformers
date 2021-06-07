@@ -202,7 +202,7 @@ class PerformerAttention(nn.Module):
         print(f'[DEBUG]: k_prime: {k_prime.shape},')
         print(f'[DEBUG]: mask: {mask.shape},')
         print(f'[DEBUG]: mask values: {mask},')
-        if k_prime_t.isnan().any():
+        if k_prime.isnan().any():
             print(f'[DEBUG]Nan found in k_prime values in compute_attention_with_projected_queries_and_keys')
             raise Exception()
         if mask is not None:
