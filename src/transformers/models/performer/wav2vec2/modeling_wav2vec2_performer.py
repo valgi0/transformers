@@ -355,13 +355,13 @@ class Wav2Vec2Attention(nn.Module):
         #     tgt_len,
         #     self.head_dim,
         # ), f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
-
+        print(f'[DEBUG] Wav2vec2attention. Attn_output before reshape: {attn_output}')
         attn_output = (
             attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
                 .transpose(1, 2)
                 .reshape(bsz, tgt_len, embed_dim)
         )
-
+        print(f'[DEBUG] Wav2vec2attention. Attn_output before projection: {attn_output}')
         attn_output = self.out_proj(attn_output)
         print(f'[DEBUG] Wav2vec2attention. Attn_output: {attn_output}')
         return attn_output, attn_weights_reshaped, past_key_value
