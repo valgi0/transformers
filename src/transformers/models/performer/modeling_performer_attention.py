@@ -222,15 +222,15 @@ class PerformerAttention(nn.Module):
         # Noncausal
         print(f'[DEBUG] Causal in_numerator_for_projected_queries_and_keys: {self.causal}')
         if not self.causal:
-        if q_prime.isnan().any():
-            print(f'[DEBUG] PerformerAttention:q_prime Nan found in _numerator_for_projected_queries_and_keys')
-            raise Exception()
-        if k_prime_t.isnan().any():
-            print(f'[DEBUG] PerformerAttention:k_prime_t Nan found in  _numerator_for_projected_queries_and_keys')
-            raise Exception()
-        if v.isnan().any():
-            print(f'[DEBUG] PerformerAttention:v Nan found in _numerator_for_projected_queries_and_keys')
-            raise Exception()
+            if q_prime.isnan().any():
+                print(f'[DEBUG] PerformerAttention:q_prime Nan found in _numerator_for_projected_queries_and_keys')
+                raise Exception()
+            if k_prime_t.isnan().any():
+                print(f'[DEBUG] PerformerAttention:k_prime_t Nan found in  _numerator_for_projected_queries_and_keys')
+                raise Exception()
+            if v.isnan().any():
+                print(f'[DEBUG] PerformerAttention:v Nan found in _numerator_for_projected_queries_and_keys')
+                raise Exception()
             return q_prime @ (k_prime_t @ v)
 
         # Causal, during training
