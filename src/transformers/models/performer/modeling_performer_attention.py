@@ -207,7 +207,7 @@ class PerformerAttention(nn.Module):
             raise Exception()
         if mask is not None:
             k_prime *= mask
-        if k_prime_t.isnan().any():
+        if k_prime.isnan().any():
             print(f'[DEBUG]Nan found in k_prime_t values befor transpose')
             raise Exception()
         k_prime_t = k_prime.transpose(-2, -1)
