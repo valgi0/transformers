@@ -201,6 +201,7 @@ class PerformerAttention(nn.Module):
         print(f'[DEBUG]: q_prime: {q_prime.shape},')
         print(f'[DEBUG]: k_prime: {k_prime.shape},')
         print(f'[DEBUG]: mask: {mask.shape},')
+        print(f'[DEBUG]: mask values: {mask},')
         if mask is not None:
             k_prime *= mask
 
