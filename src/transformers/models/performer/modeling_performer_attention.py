@@ -206,7 +206,10 @@ class PerformerAttention(nn.Module):
             k_prime *= mask
 
         k_prime_t = k_prime.transpose(-2, -1)
-        print(f'[DEBUG]: k_prime_t values: {k_prime_t},')
+        if k_prime_t.isnan().any():
+            print(f'[DEBUG] k_prime_t values in _numerator_for_projected_queries_and_keys')
+            raise Exception()
+
         output = self._numerator_for_projected_queries_and_keys(q_prime, k_prime_t, v)
         if output.isnan().any():
             print(f'[DEBUG] PerformerAttention. Nan found in outputs after _numerator_for_projected_queries_and_keys')
