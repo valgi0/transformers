@@ -202,12 +202,15 @@ class PerformerAttention(nn.Module):
         print(f'[DEBUG]: k_prime: {k_prime.shape},')
         print(f'[DEBUG]: mask: {mask.shape},')
         print(f'[DEBUG]: mask values: {mask},')
+        if k_prime_t.isnan().any():
+            print(f'[DEBUG]Nan found in k_prime values in compute_attention_with_projected_queries_and_keys')
+            raise Exception()
         if mask is not None:
             k_prime *= mask
 
         k_prime_t = k_prime.transpose(-2, -1)
         if k_prime_t.isnan().any():
-            print(f'[DEBUG] k_prime_t values in _numerator_for_projected_queries_and_keys')
+            print(f'[DEBUG]Nan found in k_prime_t values in compute_attention_with_projected_queries_and_keys')
             raise Exception()
 
         output = self._numerator_for_projected_queries_and_keys(q_prime, k_prime_t, v)
