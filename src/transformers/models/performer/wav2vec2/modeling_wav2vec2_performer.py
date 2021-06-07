@@ -363,7 +363,7 @@ class Wav2Vec2Attention(nn.Module):
         )
 
         attn_output = self.out_proj(attn_output)
-
+        print(f'[DEBUG] Wav2vec2attention. Attn_output: {attn_output}')
         return attn_output, attn_weights_reshaped, past_key_value
 
 
@@ -760,7 +760,7 @@ class Wav2Vec2PerformerModel(Wav2Vec2PerformerPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
+        print(f'[DEBUG] In Wav2vec2model. Encoder output: {encoder_outputs}')
         hidden_states = encoder_outputs[0]
 
         if not return_dict:
@@ -914,7 +914,7 @@ class Wav2Vec2PerformerForCTC(Wav2Vec2PerformerPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
+        print(f'[DEBUG] in Wav2Vec2PerformerForCTC forward. Wav2Vec2Model output: {outputs}')
         hidden_states = outputs[0]
         hidden_states = self.dropout(hidden_states)
 

@@ -209,7 +209,7 @@ class PerformerAttention(nn.Module):
 
         if self.normalize_output:
             output /= self._denominator_for_projected_queries_and_keys(q_prime, k_prime_t)
-
+        print(f'[DEBUG] performer attention. Output {output}')
         return output
 
     def _numerator_for_projected_queries_and_keys(self, q_prime, k_prime_t, v):
