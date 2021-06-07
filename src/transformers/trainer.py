@@ -1763,6 +1763,7 @@ class Trainer:
             labels = inputs.pop("labels")
         else:
             labels = None
+        print(f'[DEBUG] in trainer compute loss. Model Input: {inputs}')
         outputs = model(**inputs)
         print(f'[DEBUG] in trainer compute loss. Model output: {outputs}')
         # Save past state if it exists
