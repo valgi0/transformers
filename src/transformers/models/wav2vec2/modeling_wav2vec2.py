@@ -1034,7 +1034,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
 
             >>> loss = model(input_values, labels=labels).loss
         """
-
+        print(f'[DEBUG] In wav2vec2forctc forward. Labels: {labels}')
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.wav2vec2(

@@ -904,7 +904,7 @@ class Wav2Vec2PerformerForCTC(Wav2Vec2PerformerPreTrainedModel):
             >>> predicted_ids = torch.argmax(logits, dim=-1)
             >>> transcription = tokenizer.decode(predicted_ids[0])
         """
-
+        print(f'[DEBUG] In wav2vec2forctc forward. Labels: {labels}')
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.wav2vec2(
@@ -919,9 +919,38 @@ class Wav2Vec2PerformerForCTC(Wav2Vec2PerformerPreTrainedModel):
         hidden_states = self.dropout(hidden_states)
 
         logits = self.lm_head(hidden_states)
+        loss = None
+        if labels is not None:
+            print(f'[DEBUG] In wav2vec2forCTC, Labels found : {labels}')
+            # retrieve loss input_lengths from attention_mask
+            attention_mask = (
+                attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
+            )
+            input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1))
+
+            # assuming that padded tokens are filled with -100
+            # when not being attended to
+            labels_mask = labels >= 0
+            target_lengths = labels_mask.sum(-1)
+            flattened_targets = labels.masked_select(labels_mask)
+
+            log_probs = F.log_softmax(logits, dim=-1).transpose(0, 1)
+
+            with torch.backends.cudnn.flags(enabled=False):
+                loss = F.ctc_loss(
+                    log_probs,
+                    flattened_targets,
+                    input_lengths,
+                    target_lengths,
+                    blank=self.config.pad_token_id,
+                    reduction=self.config.ctc_loss_reduction,
+                    zero_infinity=self.config.ctc_zero_infinity,
+                )
 
         if not return_dict:
             output = (logits,) + outputs[1:]
-            return output
+            return ((loss,) + output) if loss is not None else output
 
-        return CausalLMOutput(logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
+        return CausalLMOutput(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
+        )
