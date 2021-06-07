@@ -1764,6 +1764,7 @@ class Trainer:
         else:
             labels = None
         outputs = model(**inputs)
+        print(f'[DEBUG] in trainer compute loss. Model output: {outputs}')
         # Save past state if it exists
         # TODO: this needs to be fixed and made cleaner later.
         if self.args.past_index >= 0:

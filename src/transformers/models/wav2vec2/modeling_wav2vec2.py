@@ -1052,7 +1052,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
 
         loss = None
         if labels is not None:
-
+            print(f'[DEBUG] In wav2vec2forCTC, Labels found : {labels}')
             # retrieve loss input_lengths from attention_mask
             attention_mask = (
                 attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
