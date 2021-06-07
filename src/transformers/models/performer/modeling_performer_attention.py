@@ -207,10 +207,12 @@ class PerformerAttention(nn.Module):
             raise Exception()
         if mask is not None:
             k_prime *= mask
-
+        if k_prime_t.isnan().any():
+            print(f'[DEBUG]Nan found in k_prime_t values befor transpose')
+            raise Exception()
         k_prime_t = k_prime.transpose(-2, -1)
         if k_prime_t.isnan().any():
-            print(f'[DEBUG]Nan found in k_prime_t values in compute_attention_with_projected_queries_and_keys')
+            print(f'[DEBUG]Nan found in k_prime_t after transpose')
             raise Exception()
 
         output = self._numerator_for_projected_queries_and_keys(q_prime, k_prime_t, v)
