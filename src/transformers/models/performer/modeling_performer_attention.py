@@ -114,11 +114,7 @@ class PerformerAttention(nn.Module):
             weights: torch.tensor(bs, num_heads, seq_length, seq_length) Attention weights context: torch.tensor(bs,
             seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
-        print('[DEBUG] PerformerAttention forward input')
-        print(f'[DEBUG]: query shape: {query.shape},')
-        print(f'[DEBUG]: key shape: {key.shape},')
-        print(f'[DEBUG]: value shape: {value.shape},')
-        print(f'[DEBUG]: mask shape: {mask.shape},')
+
         bs, q_length, _, _ = query.shape
 
         assert not output_attentions, "Can't output attention maps when using Performer attention."
@@ -143,9 +139,6 @@ class PerformerAttention(nn.Module):
             k_prime: torch.tensor(bs, seq_length, num_features)
         """
         # Instead of dividing the product QK^T by sqrt(d), we divide Q and K by the 4th root of d.
-        print('[DEBUG] get_projected_queries_and_keys input')
-        print(f'[DEBUG]: q: {q.shape},')
-        print(f'[DEBUG]: k: {k.shape},')
         q = q / (self.d_model ** 0.25)
         k = k / (self.d_model ** 0.25)
 
@@ -197,11 +190,6 @@ class PerformerAttention(nn.Module):
             V': torch.tensor(bs, seq_length, dim)
         """
         # Apply the padding mask to K'. Also applying it to Q' would be redundant.
-        print('[DEBUG] Wcompute_attention_with_projected_queries_and_keys input')
-        print(f'[DEBUG]: q_prime: {q_prime.shape},')
-        print(f'[DEBUG]: k_prime: {k_prime.shape},')
-        print(f'[DEBUG]: mask: {mask.shape},')
-        print(f'[DEBUG]: mask values: {mask},')
         if k_prime.isnan().any():
             print(f'[DEBUG]Nan found in k_prime values in compute_attention_with_projected_queries_and_keys')
             raise Exception()
@@ -232,7 +220,6 @@ class PerformerAttention(nn.Module):
         # Noncausal
         print(f'[DEBUG] Causal in_numerator_for_projected_queries_and_keys: {self.causal}')
         if not self.causal:
-
             print(f'[DEBUG] PerformerAttention:q_prime in _numerator_for_projected_queries_and_keys: {q_prime}')
             print(f'[DEBUG] PerformerAttention:k_prime_t in _numerator_for_projected_queries_and_keys:{k_prime_t}')
             print(f'[DEBUG] PerformerAttention:v in _numerator_for_projected_queries_and_keys:{v}')

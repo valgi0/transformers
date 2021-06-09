@@ -80,7 +80,7 @@ class PerformerAttentionConfig():
     def __init__(
         self,
         attention_dropout = 0.1,
-        kernel_type = PerformerKernel.exp,
+        kernel_type = PerformerKernel.cosh,
         causal = False,
         use_recurrent_decoding = False,
         kernel_epsilon = 1e-4,
@@ -102,7 +102,7 @@ class PerformerAttentionConfig():
     ):
 
         self.attention_dropout = attention_dropout
-        self.kernel_type: Union[str, Callable, PerformerKernel] = PerformerKernel.exp
+        self.kernel_type: Union[str, Callable, PerformerKernel] = PerformerKernel.cosh
 
         self.causal = causal
         self.use_recurrent_decoding = use_recurrent_decoding

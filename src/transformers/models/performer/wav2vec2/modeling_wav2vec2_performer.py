@@ -340,14 +340,7 @@ class Wav2Vec2Attention(nn.Module):
         value_states = value_states.view(*performer_shape_proj)
         attention_mask = (1.0 - (attention_mask // -10000.0)).int()
         attention_mask = attention_mask.view(*attention_mask_shape_proj)
-        print(f'[DEBUG] In Wav2Vec2Attention. Attention mask: {attention_mask}')
 
-
-        print('[DEBUG] Wav2vecAttention forward input')
-        print(f'[DEBUG]: query_layer shape: {query_states.shape},')
-        print(f'[DEBUG]: key_layer shape: {key_states.shape},')
-        print(f'[DEBUG]: value_layer shape: {value_states.shape},')
-        print(f'[DEBUG]: attention_mask shape: {attention_mask.shape},')
 
         attn_output = self.performer_attention(query_states, key_states,
                                                value_states, attention_mask, output_attentions)
@@ -358,7 +351,7 @@ class Wav2Vec2Attention(nn.Module):
         #     tgt_len,
         #     self.head_dim,
         # ), f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
-        print(f'[DEBUG] Wav2vec2attention. Attn_output before reshape: {attn_output}')
+
         if attn_output.isnan().any():
             print(f'[DEBUG] Wav2vec2attention. Nan found in attn_outputs')
             raise Exception()
@@ -370,12 +363,12 @@ class Wav2Vec2Attention(nn.Module):
         if attn_output.isnan().any():
             print(f'[DEBUG] Wav2vec2attention. Nan found in attn_outputs after reshape')
             raise Exception()
-        print(f'[DEBUG] Wav2vec2attention. Attn_output before projection: {attn_output}')
+
         attn_output = self.out_proj(attn_output)
         if attn_output.isnan().any():
             print(f'[DEBUG] Wav2vec2attention. Nan found in attn_outputs after projection')
             raise Exception()
-        print(f'[DEBUG] Wav2vec2attention. Attn_output: {attn_output}')
+
         return attn_output, attn_weights_reshaped, past_key_value
 
 
@@ -496,7 +489,6 @@ class Wav2Vec2Encoder(nn.Module):
 
             # extend attention_mask
             attention_mask = (1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)) * -10000.0
-            print(f'[DEBUG] Attention mask before extending: {attention_mask.shape}')
             #attention_mask = attention_mask.expand(
             #    attention_mask.shape[0], 1, attention_mask.shape[-1], 1
             #)
