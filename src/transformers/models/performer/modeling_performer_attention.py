@@ -129,7 +129,7 @@ class PerformerAttention(nn.Module):
 
         # Get the transformed values of Q and K
         q_prime, k_prime = self.get_projected_queries_and_keys(query, key)
-        return self.compute_attention_with_projected_queries_and_keys(q_prime, k_prime, value, mask)
+        return self.compute_attention_with_projected_queries_and_keys(q_prime, torch.nan_to_num(k_prime), value, mask)
 
     def get_projected_queries_and_keys(self, q, k):
         """
