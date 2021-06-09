@@ -22,6 +22,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
+from ..bert.modeling_bert_performer import BertAttention
 from ....activations import ACT2FN
 from ....file_utils import (add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings)
 from ....modeling_outputs import BaseModelOutput, CausalLMOutput, MaskedLMOutput
@@ -407,13 +408,14 @@ class Wav2Vec2Output(nn.Module):
 class Wav2Vec2EncoderLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention = Wav2Vec2Attention(
-            config
-            # embed_dim=config.hidden_size,
-            # num_heads=config.num_attention_heads,
-            # dropout=config.hidden_dropout_prob,
-            # is_decoder=False
-        )
+        # self.attention = Wav2Vec2Attention(
+        #     config
+        #     # embed_dim=config.hidden_size,
+        #     # num_heads=config.num_attention_heads,
+        #     # dropout=config.hidden_dropout_prob,
+        #     # is_decoder=False
+        # )
+        self.attention = BertAttention(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.feed_forward = Wav2Vec2FeedForward(config)
