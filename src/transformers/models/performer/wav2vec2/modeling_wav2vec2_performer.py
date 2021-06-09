@@ -954,6 +954,14 @@ class Wav2Vec2PerformerForCTC(Wav2Vec2PerformerPreTrainedModel):
         if not return_dict:
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
+        if(loss.isnan().any()):
+            print('Nan in loss')
+        if(logits.isnan().any()):
+            print('Nan in logits')
+        if(outputs.hidden_states.isnan().any()):
+            print('Nan in hidden_states')
+        if(outputs.attentions.isnan().any()):
+            print('Nan in attentions')
 
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
