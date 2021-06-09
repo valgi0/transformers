@@ -114,6 +114,9 @@ class PerformerAttention(nn.Module):
             weights: torch.tensor(bs, num_heads, seq_length, seq_length) Attention weights context: torch.tensor(bs,
             seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
+        print(f'[DEBUG] PerformerAttention:q_prime in _numerator_for_projected_queries_and_keys: {query}')
+        print(f'[DEBUG] PerformerAttention:k_prime_t in _numerator_for_projected_queries_and_keys:{key}')
+        print(f'[DEBUG] PerformerAttention:v in _numerator_for_projected_queries_and_keys:{value}')
 
         bs, q_length, _, _ = query.shape
 
@@ -221,9 +224,6 @@ class PerformerAttention(nn.Module):
         # Noncausal
         print(f'[DEBUG] Causal in_numerator_for_projected_queries_and_keys: {self.causal}')
         if not self.causal:
-            print(f'[DEBUG] PerformerAttention:q_prime in _numerator_for_projected_queries_and_keys: {q_prime}')
-            print(f'[DEBUG] PerformerAttention:k_prime_t in _numerator_for_projected_queries_and_keys:{k_prime_t}')
-            print(f'[DEBUG] PerformerAttention:v in _numerator_for_projected_queries_and_keys:{v}')
             return torch.nan_to_num(q_prime @ (k_prime_t @ v))
 
         # Causal, during training
