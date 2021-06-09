@@ -201,10 +201,20 @@ class PerformerAttention(nn.Module):
         print(f'[DEBUG]: q_prime: {q_prime.shape},')
         print(f'[DEBUG]: k_prime: {k_prime.shape},')
         print(f'[DEBUG]: mask: {mask.shape},')
+        print(f'[DEBUG]: mask values: {mask},')
+        if k_prime.isnan().any():
+            print(f'[DEBUG]Nan found in k_prime values in compute_attention_with_projected_queries_and_keys')
+            raise Exception()
         if mask is not None:
             k_prime *= mask
-
+        if k_prime.isnan().any():
+            print(f'[DEBUG]Nan found in k_prime_t values befor transpose')
+            raise Exception()
         k_prime_t = k_prime.transpose(-2, -1)
+        if k_prime_t.isnan().any():
+            print(f'[DEBUG]Nan found in k_prime_t after transpose')
+            raise Exception()
+
         output = self._numerator_for_projected_queries_and_keys(q_prime, k_prime_t, v)
         if output.isnan().any():
             print(f'[DEBUG] PerformerAttention. Nan found in outputs after _numerator_for_projected_queries_and_keys')
@@ -220,7 +230,17 @@ class PerformerAttention(nn.Module):
 
     def _numerator_for_projected_queries_and_keys(self, q_prime, k_prime_t, v):
         # Noncausal
+        print(f'[DEBUG] Causal in_numerator_for_projected_queries_and_keys: {self.causal}')
         if not self.causal:
+            if q_prime.isnan().any():
+                print(f'[DEBUG] PerformerAttention:q_prime Nan found in _numerator_for_projected_queries_and_keys')
+                raise Exception()
+            if k_prime_t.isnan().any():
+                print(f'[DEBUG] PerformerAttention:k_prime_t Nan found in  _numerator_for_projected_queries_and_keys')
+                raise Exception()
+            if v.isnan().any():
+                print(f'[DEBUG] PerformerAttention:v Nan found in _numerator_for_projected_queries_and_keys')
+                raise Exception()
             return q_prime @ (k_prime_t @ v)
 
         # Causal, during training
