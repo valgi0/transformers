@@ -958,10 +958,8 @@ class Wav2Vec2PerformerForCTC(Wav2Vec2PerformerPreTrainedModel):
             print('Nan in loss')
         if(logits.isnan().any()):
             print('Nan in logits')
-        if(outputs.hidden_states.isnan().any()):
-            print('Nan in hidden_states')
-        if(outputs.attentions.isnan().any()):
-            print('Nan in attentions')
+        if(outputs.last_hidden_state.isnan().any()):
+            print('Nan in last_hidden_state')
 
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
