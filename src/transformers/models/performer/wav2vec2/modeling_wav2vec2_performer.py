@@ -178,6 +178,10 @@ class Wav2Vec2FeatureExtractor(nn.Module):
             )
         self.conv_layers = nn.ModuleList(conv_layers)
 
+    def _freeze_parameters(self):
+        for param in self.parameters():
+            param.requires_grad = False
+
     def forward(self, input_values):
         hidden_states = input_values[:, None]
         for conv_layer in self.conv_layers:
