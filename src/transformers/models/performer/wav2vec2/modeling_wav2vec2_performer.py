@@ -439,13 +439,14 @@ class Wav2Vec2EncoderLayer(nn.Module):
 class Wav2Vec2EncoderLayerStableLayerNorm(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention = Wav2Vec2Attention(config
-                                           # embed_dim=config.hidden_size,
-                                           # num_heads=config.num_attention_heads,
-                                           # dropout=config.hidden_dropout_prob,
-                                           # is_decoder=False,
-
-                                           )
+        # self.attention = Wav2Vec2Attention(config
+        #                                    # embed_dim=config.hidden_size,
+        #                                    # num_heads=config.num_attention_heads,
+        #                                    # dropout=config.hidden_dropout_prob,
+        #                                    # is_decoder=False,
+        #
+        #                                    )
+        self.attention = BertAttention(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.feed_forward = Wav2Vec2FeedForward(config)
