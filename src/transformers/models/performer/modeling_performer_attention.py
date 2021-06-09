@@ -114,9 +114,9 @@ class PerformerAttention(nn.Module):
             weights: torch.tensor(bs, num_heads, seq_length, seq_length) Attention weights context: torch.tensor(bs,
             seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
-        print(f'[DEBUG] PerformerAttention:q_prime in _numerator_for_projected_queries_and_keys: {query}')
-        print(f'[DEBUG] PerformerAttention:k_prime_t in _numerator_for_projected_queries_and_keys:{key}')
-        print(f'[DEBUG] PerformerAttention:v in _numerator_for_projected_queries_and_keys:{value}')
+        print(f'[DEBUG] PerformerAttention:query : {query}')
+        print(f'[DEBUG] PerformerAttention:key :{key}')
+        print(f'[DEBUG] PerformerAttention:value:{value}')
 
         bs, q_length, _, _ = query.shape
 

@@ -341,7 +341,7 @@ class Wav2Vec2Attention(nn.Module):
         attention_mask = (1.0 - (attention_mask // -10000.0)).int()
         attention_mask = attention_mask.view(*attention_mask_shape_proj)
 
-
+        print(f"Attention_mask:{attention_mask}")
         attn_output = self.performer_attention(query_states, key_states,
                                                value_states, attention_mask, output_attentions)
         # attn_output = torch.bmm(attn_probs, value_states)
