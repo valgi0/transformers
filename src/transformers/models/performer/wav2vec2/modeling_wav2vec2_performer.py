@@ -223,7 +223,7 @@ class Wav2Vec2Attention(nn.Module):
         self.num_heads = config.num_attention_heads
         self.dropout = config.hidden_dropout_prob
         self.head_dim = config.hidden_size // config.num_attention_heads
-        #self.mask_reshape = config.mask_reshape
+        # self.mask_reshape = config.mask_reshape
         assert (
                 self.head_dim * config.num_attention_heads == self.embed_dim
         ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} " \
@@ -299,14 +299,14 @@ class Wav2Vec2Attention(nn.Module):
         value_states = value_states.view(*proj_shape)
 
         src_len = key_states.size(1)
-        #attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
+        # attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
-        #if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
+        # if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
         #    raise ValueError(
         #        f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
         #    )
 
-        #if attention_mask is not None:
+        # if attention_mask is not None:
         #    if attention_mask.size() != (bsz, 1, tgt_len, src_len):
         #        raise ValueError(
         #            f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
@@ -316,26 +316,26 @@ class Wav2Vec2Attention(nn.Module):
 
         # attn_weights = F.softmax(attn_weights, dim=-1)
 
-        #if layer_head_mask is not None:
+        # if layer_head_mask is not None:
         #    assert layer_head_mask.size() == (
         #        self.num_heads,
         #    ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
         #    attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
         #    attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-        #if output_attentions:
-            # this operation is a bit akward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to reshaped
-            # twice and have to be reused in the following
+        # if output_attentions:
+        # this operation is a bit akward, but it's required to
+        # make sure that attn_weights keeps its gradient.
+        # In order to do so, attn_weights have to reshaped
+        # twice and have to be reused in the following
         #    attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
         #    attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
-        #else:
+        # else:
         #    attn_weights_reshaped = None
         attn_weights_reshaped = None
         # attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
         performer_shape_proj = (bsz, self.num_heads, tgt_len, -1)
-        attention_mask_shape_proj = (bsz, 1, -1, 1)  #bsz, 1, seq_len, 1
+        attention_mask_shape_proj = (bsz, 1, -1, 1)  # bsz, 1, seq_len, 1
         query_states = query_states.view(*performer_shape_proj)
         key_states = key_states.view(*performer_shape_proj)
         value_states = value_states.view(*performer_shape_proj)
@@ -408,14 +408,14 @@ class Wav2Vec2Output(nn.Module):
 class Wav2Vec2EncoderLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        # self.attention = Wav2Vec2Attention(
-        #     config
-        #     # embed_dim=config.hidden_size,
-        #     # num_heads=config.num_attention_heads,
-        #     # dropout=config.hidden_dropout_prob,
-        #     # is_decoder=False
-        # )
-        self.attention = BertAttention(config)
+        self.attention = Wav2Vec2Attention(
+            config
+            # embed_dim=config.hidden_size,
+            # num_heads=config.num_attention_heads,
+            # dropout=config.hidden_dropout_prob,
+            # is_decoder=False
+        )
+        # self.attention = BertAttention(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.feed_forward = Wav2Vec2FeedForward(config)
@@ -439,14 +439,14 @@ class Wav2Vec2EncoderLayer(nn.Module):
 class Wav2Vec2EncoderLayerStableLayerNorm(nn.Module):
     def __init__(self, config):
         super().__init__()
-        # self.attention = Wav2Vec2Attention(config
-        #                                    # embed_dim=config.hidden_size,
-        #                                    # num_heads=config.num_attention_heads,
-        #                                    # dropout=config.hidden_dropout_prob,
-        #                                    # is_decoder=False,
-        #
-        #                                    )
-        self.attention = BertAttention(config)
+        self.attention = Wav2Vec2Attention(config
+                                           # embed_dim=config.hidden_size,
+                                           # num_heads=config.num_attention_heads,
+                                           # dropout=config.hidden_dropout_prob,
+                                           # is_decoder=False,
+
+                                           )
+        # self.attention = BertAttention(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.feed_forward = Wav2Vec2FeedForward(config)
@@ -492,9 +492,9 @@ class Wav2Vec2Encoder(nn.Module):
 
             # extend attention_mask
             attention_mask = (1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)) * -10000.0
-            #attention_mask = attention_mask.expand(
+            # attention_mask = attention_mask.expand(
             #    attention_mask.shape[0], 1, attention_mask.shape[-1], 1
-            #)
+            # )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
         hidden_states = hidden_states + position_embeddings
@@ -554,9 +554,9 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
             # extend attention_mask
             attention_mask = (1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)) * -10000.0
             print(f'[DEBUG] Attention mask before extending: {attention_mask.shape}')
-            #attention_mask = attention_mask.expand(
+            # attention_mask = attention_mask.expand(
             #    attention_mask.shape[0], 1, attention_mask.shape[-1], 1
-            #)
+            # )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
         hidden_states = hidden_states + position_embeddings
@@ -870,6 +870,13 @@ class Wav2Vec2PerformerForCTC(Wav2Vec2PerformerPreTrainedModel):
 
         self.init_weights()
 
+    def freeze_feature_extractor(self):
+        """
+        Calling this function will disable the gradient computation for the feature extractor so that its parameter
+        will not be updated during training.
+        """
+        self.wav2vec2.feature_extractor._freeze_parameters()
+
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -957,11 +964,11 @@ class Wav2Vec2PerformerForCTC(Wav2Vec2PerformerPreTrainedModel):
         if not return_dict:
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
-        if(loss.isnan().any()):
+        if (loss.isnan().any()):
             print('Nan in loss')
-        if(logits.isnan().any()):
+        if (logits.isnan().any()):
             print('Nan in logits')
-        if(outputs.last_hidden_state.isnan().any()):
+        if (outputs.last_hidden_state.isnan().any()):
             print('Nan in last_hidden_state')
 
         return CausalLMOutput(
