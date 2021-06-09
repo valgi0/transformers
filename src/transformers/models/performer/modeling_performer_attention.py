@@ -214,9 +214,9 @@ class PerformerAttention(nn.Module):
 
         if self.normalize_output:
             output /= self._denominator_for_projected_queries_and_keys(q_prime, k_prime_t)
-            if output.isnan().any():
-                print(f'[DEBUG] PerformerAttention. Nan found in outputs after normalization')
-                raise Exception()
+            # if output.isnan().any():
+            #     print(f'[DEBUG] PerformerAttention. Nan found in outputs after normalization')
+            #     raise Exception()
         print(f'[DEBUG] performer attention. Output {output}')
         return output
 
