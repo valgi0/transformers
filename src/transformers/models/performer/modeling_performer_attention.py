@@ -142,6 +142,7 @@ class PerformerAttention(nn.Module):
         q = q / (self.d_model ** 0.25)
         k = k / (self.d_model ** 0.25)
 
+        print(f"Projected queris and keys, random_features:{self.random_features}")
         projected_q = q @ self.random_features
         projected_k = k @ self.random_features
 
