@@ -17,12 +17,12 @@
 import warnings
 from typing import Optional, Tuple
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
+from ..bert.modeling_bert_performer import BertAttention
 from ....activations import ACT2FN
 from ....file_utils import (add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings)
 from ....modeling_outputs import BaseModelOutput, CausalLMOutput, MaskedLMOutput
@@ -33,7 +33,7 @@ from ..modeling_performer_attention import PerformerAttention
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "Wav2Vec2Config"
+_CONFIG_FOR_DOC = "Wav2Vec2PerformerConfig"
 
 WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/wav2vec2-base-960h",
@@ -42,73 +42,6 @@ WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/wav2vec2-large-960h-lv60-self",
     # See all Wav2Vec2 models at https://huggingface.co/models?filter=wav2vec2
 ]
-
-
-def _compute_mask_indices(
-        shape: Tuple[int, int],
-        mask_prob: float,
-        mask_length: int,
-        device: torch.device,
-        min_masks: int = 0,
-) -> torch.tensor:
-    """
-    Computes random mask spans for a given shape. Used to implement `SpecAugment: A Simple Data Augmentation Method for
-    ASR <https://arxiv.org/abs/1904.08779>`__.
-
-    Args:
-        shape: the the shape for which to compute masks.
-            should be of size 2 where first element is batch size and 2nd is timesteps
-        mask_prob: probability for each token to be chosen as start of the span to be masked. this will be multiplied by
-            number of timesteps divided by length of mask span to mask approximately this percentage of all elements.
-            however due to overlaps, the actual number will be smaller (unless no_overlap is True)
-        mask_length: size of the mask
-        min_masks: minimum number of masked spans
-
-    """
-    batch_size, sequence_length = shape
-
-    if mask_length < 1:
-        raise ValueError("`mask_length` has to be bigger than 0.")
-
-    if mask_length > sequence_length:
-        raise ValueError(
-            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length} and `sequence_length`: {sequence_length}`"
-        )
-
-    # compute number of masked spans in batch
-    num_masked_spans = int(mask_prob * sequence_length / mask_length + torch.rand((1,)).item())
-    num_masked_spans = max(num_masked_spans, min_masks)
-
-    # make sure num masked indices <= sequence_length
-    if num_masked_spans * mask_length > sequence_length:
-        num_masked_spans = sequence_length // mask_length
-
-    # SpecAugment mask to fill
-    spec_aug_mask = torch.zeros((batch_size, sequence_length), device=device, dtype=torch.bool)
-
-    # uniform distribution to sample from, make sure that offset samples are < sequence_length
-    uniform_dist = torch.ones((batch_size, sequence_length - (mask_length - 1)), device=device)
-
-    # get random indices to mask
-    spec_aug_mask_idxs = torch.multinomial(uniform_dist, num_masked_spans)
-
-    # expand masked indices to masked spans
-    spec_aug_mask_idxs = (
-        spec_aug_mask_idxs.unsqueeze(dim=-1)
-            .expand((batch_size, num_masked_spans, mask_length))
-            .reshape(batch_size, num_masked_spans * mask_length)
-    )
-    offsets = (
-        torch.arange(mask_length, device=device)[None, None, :]
-            .expand((batch_size, num_masked_spans, mask_length))
-            .reshape(batch_size, num_masked_spans * mask_length)
-    )
-    spec_aug_mask_idxs = spec_aug_mask_idxs + offsets
-
-    # scatter indices to mask
-    spec_aug_mask = spec_aug_mask.scatter(1, spec_aug_mask_idxs, True)
-
-    return spec_aug_mask
 
 
 class Wav2Vec2NoLayerNormConvLayer(nn.Module):
@@ -124,10 +57,12 @@ class Wav2Vec2NoLayerNormConvLayer(nn.Module):
             stride=config.conv_stride[layer_id],
             bias=config.conv_bias,
         )
+        self.dropout = nn.Dropout(config.feat_extract_dropout)
         self.activation = ACT2FN[config.feat_extract_activation]
 
     def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
+        hidden_states = self.dropout(hidden_states)
         hidden_states = self.activation(hidden_states)
         return hidden_states
 
@@ -145,11 +80,13 @@ class Wav2Vec2LayerNormConvLayer(nn.Module):
             stride=config.conv_stride[layer_id],
             bias=config.conv_bias,
         )
+        self.dropout = nn.Dropout(config.feat_extract_dropout)
         self.layer_norm = nn.LayerNorm(self.out_conv_dim, elementwise_affine=True)
         self.activation = ACT2FN[config.feat_extract_activation]
 
     def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
+        hidden_states = self.dropout(hidden_states)
 
         hidden_states = hidden_states.transpose(-2, -1)
         hidden_states = self.layer_norm(hidden_states)
@@ -172,12 +109,14 @@ class Wav2Vec2GroupNormConvLayer(nn.Module):
             stride=config.conv_stride[layer_id],
             bias=config.conv_bias,
         )
+        self.dropout = nn.Dropout(config.feat_extract_dropout)
         self.activation = ACT2FN[config.feat_extract_activation]
 
         self.layer_norm = nn.GroupNorm(num_groups=self.out_conv_dim, num_channels=self.out_conv_dim, affine=True)
 
     def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
+        hidden_states = self.dropout(hidden_states)
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.activation(hidden_states)
         return hidden_states
@@ -193,17 +132,7 @@ class Wav2Vec2PositionalConvEmbedding(nn.Module):
             padding=config.num_conv_pos_embeddings // 2,
             groups=config.num_conv_pos_embedding_groups,
         )
-
-        # if is_deepspeed_zero3_enabled():
-        #     import deepspeed
-        #
-        #     with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
-        #         self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
-        #     deepspeed.zero.register_external_parameter(self, self.conv.weight_v)
-        #     deepspeed.zero.register_external_parameter(self, self.conv.weight_g)
-        # else:
         self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
-
         self.padding = Wav2Vec2SamePadLayer(config.num_conv_pos_embeddings)
         self.activation = ACT2FN[config.feat_extract_activation]
 
@@ -266,7 +195,7 @@ class Wav2Vec2FeatureProjection(nn.Module):
         super().__init__()
         self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
         self.projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
-        self.dropout = nn.Dropout(config.feat_proj_dropout)
+        self.dropout = nn.Dropout(config.feat_extract_dropout)
 
     def forward(self, hidden_states):
         hidden_states = self.layer_norm(hidden_states)
@@ -310,7 +239,12 @@ class Wav2Vec2Attention(nn.Module):
         self.v_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
         self.q_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
         self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
-        self.performer_attention = PerformerAttention(config.performer_attention_config)
+
+        if self.is_decoder:
+            config.performer_attention_config["causal"] = True
+            self.performer_attention = PerformerAttention(config.performer_attention_config)
+        else:
+            self.performer_attention = PerformerAttention(config.performer_attention_config)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
@@ -372,47 +306,36 @@ class Wav2Vec2Attention(nn.Module):
         # attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
         # if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
-        #     raise ValueError(
-        #         f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
-        #     )
-        #
+        #    raise ValueError(
+        #        f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+        #    )
+
         # if attention_mask is not None:
-        #     if attention_mask.size() != (bsz, 1, tgt_len, src_len):
-        #         raise ValueError(
-        #             f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
-        #         )
-        #     attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-        #     attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-        #
+        #    if attention_mask.size() != (bsz, 1, tgt_len, src_len):
+        #        raise ValueError(
+        #            f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+        #        )
+        #    attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
+        #    attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+
         # attn_weights = F.softmax(attn_weights, dim=-1)
-        #
+
         # if layer_head_mask is not None:
-        #     if layer_head_mask.size() != (self.num_heads,):
-        #         raise ValueError(
-        #             f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
-        #         )
-        #     attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-        #     attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-        #
+        #    assert layer_head_mask.size() == (
+        #        self.num_heads,
+        #    ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+        #    attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+        #    attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+
         # if output_attentions:
-        #     # this operation is a bit awkward, but it's required to
-        #     # make sure that attn_weights keeps its gradient.
-        #     # In order to do so, attn_weights have to be reshaped
-        #     # twice and have to be reused in the following
-        #     attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-        #     attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+        # this operation is a bit akward, but it's required to
+        # make sure that attn_weights keeps its gradient.
+        # In order to do so, attn_weights have to reshaped
+        # twice and have to be reused in the following
+        #    attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+        #    attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
         # else:
-        #     attn_weights_reshaped = None
-
-        # attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        # attn_output = torch.bmm(attn_probs, value_states)
-
-        # if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
-        #     raise ValueError(
-        #         f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
-        #     )
-
+        #    attn_weights_reshaped = None
         attn_weights_reshaped = None
         # attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
         performer_shape_proj = (bsz, self.num_heads, tgt_len, -1)
@@ -426,19 +349,38 @@ class Wav2Vec2Attention(nn.Module):
         print(f"Attention_mask:{attention_mask}")
         attn_output = self.performer_attention(query_states, key_states,
                                                value_states, attention_mask, output_attentions)
+        # attn_output = torch.bmm(attn_probs, value_states)
+
+        # assert attn_output.size() == (
+        #     bsz * self.num_heads,
+        #     tgt_len,
+        #     self.head_dim,
+        # ), f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
+
+        if attn_output.isnan().any():
+            print(f'[DEBUG] Wav2vec2attention. Nan found in attn_outputs')
+            raise Exception()
         attn_output = (
             attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
                 .transpose(1, 2)
                 .reshape(bsz, tgt_len, embed_dim)
         )
+        if attn_output.isnan().any():
+            print(f'[DEBUG] Wav2vec2attention. Nan found in attn_outputs after reshape')
+            raise Exception()
+
         attn_output = self.out_proj(attn_output)
+        if attn_output.isnan().any():
+            print(f'[DEBUG] Wav2vec2attention. Nan found in attn_outputs after projection')
+            raise Exception()
+
         return attn_output, attn_weights_reshaped, past_key_value
 
 
 class Wav2Vec2FeedForward(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.intermediate_dropout = nn.Dropout(config.activation_dropout)
+        self.intermediate_dropout = nn.Dropout(config.hidden_dropout_prob)
 
         self.intermediate_dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -447,7 +389,7 @@ class Wav2Vec2FeedForward(nn.Module):
             self.intermediate_act_fn = config.hidden_act
 
         self.output_dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.output_dropout = nn.Dropout(config.hidden_dropout)
+        self.output_dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states):
         hidden_states = self.intermediate_dense(hidden_states)
@@ -474,10 +416,11 @@ class Wav2Vec2EncoderLayer(nn.Module):
             config
             # embed_dim=config.hidden_size,
             # num_heads=config.num_attention_heads,
-            # dropout=config.attention_dropout,
-            # is_decoder=False,
+            # dropout=config.hidden_dropout_prob,
+            # is_decoder=False
         )
-        self.dropout = nn.Dropout(config.hidden_dropout)
+        # self.attention = BertAttention(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.feed_forward = Wav2Vec2FeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -494,25 +437,21 @@ class Wav2Vec2EncoderLayer(nn.Module):
         hidden_states = hidden_states + self.feed_forward(hidden_states)
         hidden_states = self.final_layer_norm(hidden_states)
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        return hidden_states, attn_weights
 
 
 class Wav2Vec2EncoderLayerStableLayerNorm(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention = Wav2Vec2Attention(
-            config
-            # embed_dim=config.hidden_size,
-            # num_heads=config.num_attention_heads,
-            # dropout=config.attention_dropout,
-            # is_decoder=False,
-        )
-        self.dropout = nn.Dropout(config.hidden_dropout)
+        self.attention = Wav2Vec2Attention(config
+                                           # embed_dim=config.hidden_size,
+                                           # num_heads=config.num_attention_heads,
+                                           # dropout=config.hidden_dropout_prob,
+                                           # is_decoder=False,
+
+                                           )
+        # self.attention = BertAttention(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.feed_forward = Wav2Vec2FeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -527,12 +466,7 @@ class Wav2Vec2EncoderLayerStableLayerNorm(nn.Module):
         hidden_states = attn_residual + hidden_states
         hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states))
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        return hidden_states, attn_weights
 
 
 class Wav2Vec2Encoder(nn.Module):
@@ -541,7 +475,8 @@ class Wav2Vec2Encoder(nn.Module):
         self.config = config
         self.pos_conv_embed = Wav2Vec2PositionalConvEmbedding(config)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout)
+        # IMPORTANT: the param for dropout is probs wrong
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.layers = nn.ModuleList([Wav2Vec2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
     def forward(
@@ -562,7 +497,7 @@ class Wav2Vec2Encoder(nn.Module):
             # extend attention_mask
             attention_mask = (1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)) * -10000.0
             # attention_mask = attention_mask.expand(
-            #     attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
+            #    attention_mask.shape[0], 1, attention_mask.shape[-1], 1
             # )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
@@ -570,42 +505,16 @@ class Wav2Vec2Encoder(nn.Module):
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
-        # deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
-
         for layer in self.layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = np.random.uniform(0, 1)
-
-            skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
-            if not skip_the_layer:
-                # under deepspeed zero3 all gpus must run in sync
-                if getattr(self.config, "gradient_checkpointing", False) and self.training:
-                    # create gradient checkpointing function
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(layer),
-                        hidden_states,
-                        attention_mask,
-                    )
-                else:
-                    layer_outputs = layer(
-                        hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-                    )
-                hidden_states = layer_outputs[0]
-
-            if skip_the_layer:
-                layer_outputs = (None, None)
+            hidden_states, attn_weights = layer(
+                hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+            )
 
             if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+                all_self_attentions = all_self_attentions + (attn_weights,)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -625,7 +534,8 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
         self.config = config
         self.pos_conv_embed = Wav2Vec2PositionalConvEmbedding(config)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout)
+        # IMPORTANT: the param for dropout is probs wrong
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.layers = nn.ModuleList(
             [Wav2Vec2EncoderLayerStableLayerNorm(config) for _ in range(config.num_hidden_layers)]
         )
@@ -647,51 +557,25 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
 
             # extend attention_mask
             attention_mask = (1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)) * -10000.0
-            attention_mask = attention_mask.expand(
-                attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
-            )
+            print(f'[DEBUG] Attention mask before extending: {attention_mask.shape}')
+            # attention_mask = attention_mask.expand(
+            #    attention_mask.shape[0], 1, attention_mask.shape[-1], 1
+            # )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
         hidden_states = hidden_states + position_embeddings
         hidden_states = self.dropout(hidden_states)
 
-        # deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
-
         for layer in self.layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = np.random.uniform(0, 1)
-
-            skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
-            if not skip_the_layer:
-                # under deepspeed zero3 all gpus must run in sync
-                # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
-                if getattr(self.config, "gradient_checkpointing", False) and self.training:
-                    # create gradient checkpointing function
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(layer),
-                        hidden_states,
-                        attention_mask,
-                    )
-                else:
-                    layer_outputs = layer(
-                        hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-                    )
-                hidden_states = layer_outputs[0]
-
-            if skip_the_layer:
-                layer_outputs = (None, None)
+            hidden_states, attn_weights = layer(
+                hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+            )
 
             if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+                all_self_attentions = all_self_attentions + (attn_weights,)
 
         hidden_states = self.layer_norm(hidden_states)
 
@@ -718,7 +602,7 @@ class Wav2Vec2PerformerPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
-        """Initialize the weights"""
+        """ Initialize the weights """
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -727,18 +611,7 @@ class Wav2Vec2PerformerPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
-            # if is_deepspeed_zero3_enabled():
-            #     import deepspeed
-            #
-            #     if hasattr(module, "weight_v") and hasattr(module, "weight_g"):
-            #         with deepspeed.zero.GatheredParameters([module.weight_v, module.weight_g], modifier_rank=0):
-            #             torch.nn.init.kaiming_normal_(module.weight.data)
-            #     else:
-            #         with deepspeed.zero.GatheredParameters(module.weight, modifier_rank=0):
-            #             torch.nn.init.kaiming_normal_(module.weight.data)
-            # else:
             torch.nn.init.kaiming_normal_(module.weight.data)
-
         if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
             module.bias.data.zero_()
 
@@ -750,7 +623,7 @@ class Wav2Vec2PerformerPreTrainedModel(PreTrainedModel):
         def _conv_out_length(input_length, kernel_size, stride):
             # 1D convolutional layer output length formula taken
             # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return (input_length - kernel_size) // stride + 1
+            return torch.floor((input_length - kernel_size) / stride + 1)
 
         for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
@@ -781,9 +654,9 @@ WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
         input_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
             into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-            soundfile`). To prepare the array into `input_values`, the :class:`~transformers.Wav2Vec2Processor` should
+            soundfile`). To prepare the array into `input_values`, the :class:`~transformers.Wav2Vec2Tokenizer` should
             be used for padding and conversion into a tensor of type `torch.FloatTensor`. See
-            :meth:`transformers.Wav2Vec2Processor.__call__` for details.
+            :meth:`transformers.Wav2Vec2Tokenizer.__call__` for details.
         attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in ``[0,
             1]``:
@@ -794,8 +667,8 @@ WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
             `What are attention masks? <../glossary.html#attention-mask>`__
 
             .. warning::
-                :obj:`attention_mask` should only be passed if the corresponding processor has
-                ``config.return_attention_mask == True``. For all models whose processor has
+                :obj:`attention_mask` should only be passed if the corresponding tokenizer has
+                ``config.return_attention_mask == True``. For all models whose tokenizer has
                 ``config.return_attention_mask == False``, such as `wav2vec2-base
                 <https://huggingface.co/facebook/wav2vec2-base-960h>`__, :obj:`attention_mask` should **not** be passed
                 to avoid degraded performance when doing batched inference. For such models :obj:`input_values` should
@@ -824,8 +697,6 @@ class Wav2Vec2PerformerModel(Wav2Vec2PerformerPreTrainedModel):
         self.feature_extractor = Wav2Vec2FeatureExtractor(config)
         self.feature_projection = Wav2Vec2FeatureProjection(config)
 
-        self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
-
         if config.do_stable_layer_norm:
             self.encoder = Wav2Vec2EncoderStableLayerNorm(config)
         else:
@@ -849,23 +720,23 @@ class Wav2Vec2PerformerModel(Wav2Vec2PerformerPreTrainedModel):
 
         Example::
 
-            # >>> from transformers import Wav2Vec2Processor, Wav2Vec2Model
+            >>> from transformers import Wav2Vec2Tokenizer, Wav2Vec2Model
             # >>> from datasets import load_dataset
             # >>> import soundfile as sf
-            #
-            # >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
-            # >>> model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
-            #
-            # >>> def map_to_array(batch):
-            # >>>     speech, _ = sf.read(batch["file"])
-            # >>>     batch["speech"] = speech
-            # >>>     return batch
-            #
-            # >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-            # >>> ds = ds.map(map_to_array)
-            #
-            # >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
-            # >>> hidden_states = model(input_values).last_hidden_state
+
+            >>> tokenizer = Wav2Vec2Tokenizer.from_pretrained("facebook/wav2vec2-base-960h")
+            >>> model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
+
+            >>> def map_to_array(batch):
+            >>>     speech, _ = sf.read(batch["file"])
+            >>>     batch["speech"] = speech
+            >>>     return batch
+
+            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+            >>> ds = ds.map(map_to_array)
+
+            >>> input_values = tokenizer(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
+            >>> hidden_states = model(input_values).last_hidden_state
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -893,30 +764,6 @@ class Wav2Vec2PerformerModel(Wav2Vec2PerformerPreTrainedModel):
 
         hidden_states = self.feature_projection(hidden_states)
 
-        if self.config.apply_spec_augment and self.training:
-            batch_size, sequence_length, hidden_size = hidden_states.size()
-
-            # apply SpecAugment along time axis
-            if self.config.mask_time_prob > 0:
-                mask_time_indices = _compute_mask_indices(
-                    (batch_size, sequence_length),
-                    mask_prob=self.config.mask_time_prob,
-                    mask_length=self.config.mask_time_length,
-                    device=hidden_states.device,
-                    min_masks=2,
-                )
-                hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
-
-            # apply SpecAugment along feature axis
-            if self.config.mask_feature_prob > 0:
-                mask_feature_indices = _compute_mask_indices(
-                    (batch_size, hidden_size),
-                    mask_prob=self.config.mask_feature_prob,
-                    mask_length=self.config.mask_feature_length,
-                    device=hidden_states.device,
-                )
-                hidden_states[mask_feature_indices[:, None].expand(-1, sequence_length, -1)] = 0
-
         encoder_outputs = self.encoder(
             hidden_states,
             attention_mask=attention_mask,
@@ -924,7 +771,7 @@ class Wav2Vec2PerformerModel(Wav2Vec2PerformerPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
+        print(f'[DEBUG] In Wav2vec2model. Encoder output: {encoder_outputs}')
         hidden_states = encoder_outputs[0]
 
         if not return_dict:
@@ -947,7 +794,7 @@ class Wav2Vec2PerformerForMaskedLM(Wav2Vec2PerformerPreTrainedModel):
         )
 
         self.wav2vec2 = Wav2Vec2PerformerModel(config)
-        self.dropout = nn.Dropout(config.final_dropout)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
         self.init_weights()
@@ -964,33 +811,33 @@ class Wav2Vec2PerformerForMaskedLM(Wav2Vec2PerformerPreTrainedModel):
             labels=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+        labels (:obj:`Float.LongTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             TODO(PVP): Fill out when adding training
 
         Returns:
 
         Example::
-            #
-            # >>> from transformers import Wav2Vec2Processor, Wav2Vec2Model
+
+            >>> from transformers import Wav2Vec2Tokenizer, Wav2Vec2Model
             # >>> from datasets import load_dataset
             # >>> import soundfile as sf
-            #
-            # >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
-            # >>> model = Wav2Vec2ForMaskedLM.from_pretrained("facebook/wav2vec2-base-960h")
-            #
-            # >>> def map_to_array(batch):
-            # >>>     speech, _ = sf.read(batch["file"])
-            # >>>     batch["speech"] = speech
-            # >>>     return batch
-            #
-            # >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-            # >>> ds = ds.map(map_to_array)
-            #
-            # >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
-            # >>> logits = model(input_values).logits
-            #
-            # >>> predicted_ids = torch.argmax(logits, dim=-1)
-            # >>> transcription = processor.decode(predicted_ids[0])
+
+            >>> tokenizer = Wav2Vec2Tokenizer.from_pretrained("facebook/wav2vec2-base-960h")
+            >>> model = Wav2Vec2ForMaskedLM.from_pretrained("facebook/wav2vec2-base-960h")
+
+            >>> def map_to_array(batch):
+            >>>     speech, _ = sf.read(batch["file"])
+            >>>     batch["speech"] = speech
+            >>>     return batch
+
+            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+            >>> ds = ds.map(map_to_array)
+
+            >>> input_values = tokenizer(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
+            >>> logits = model(input_values).logits
+
+            >>> predicted_ids = torch.argmax(logits, dim=-1)
+            >>> transcription = tokenizer.decode(predicted_ids[0])
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1022,7 +869,7 @@ class Wav2Vec2PerformerForCTC(Wav2Vec2PerformerPreTrainedModel):
         super().__init__(config)
 
         self.wav2vec2 = Wav2Vec2PerformerModel(config)
-        self.dropout = nn.Dropout(config.final_dropout)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
         self.init_weights()
@@ -1046,48 +893,36 @@ class Wav2Vec2PerformerForCTC(Wav2Vec2PerformerPreTrainedModel):
             labels=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_length)`, `optional`):
-            Labels for connectionist temporal classification. Note that ``target_length`` has to be smaller or equal to
-            the sequence length of the output logits. Indices are selected in ``[-100, 0, ..., config.vocab_size -
-            1]``. All labels set to ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ...,
-            config.vocab_size - 1]``.
+        labels (:obj:`Float.LongTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+            TODO(PVP): Fill out when adding training
 
         Returns:
 
         Example::
-            #
-            # >>> import torch
-            # >>> from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC
+
+            >>> import torch
+            >>> from transformers import Wav2Vec2Tokenizer, Wav2Vec2ForCTC
             # >>> from datasets import load_dataset
             # >>> import soundfile as sf
-            #
-            # >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
-            # >>> model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
-            #
-            # >>> def map_to_array(batch):
-            # >>>     speech, _ = sf.read(batch["file"])
-            # >>>     batch["speech"] = speech
-            # >>>     return batch
-            #
-            # >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-            # >>> ds = ds.map(map_to_array)
-            #
-            # >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
-            # >>> logits = model(input_values).logits
-            # >>> predicted_ids = torch.argmax(logits, dim=-1)
-            #
-            # >>> transcription = processor.decode(predicted_ids[0])
-            #
-            # >>> # compute loss
-            # >>> target_transcription = "A MAN SAID TO THE UNIVERSE SIR I EXIST"
-            #
-            # >>> # wrap processor as target processor to encode labels
-            # >>> with processor.as_target_processor():
-            # >>>     labels = processor(target_transcription, return_tensors="pt").input_ids
-            #
-            # >>> loss = model(input_values, labels=labels).loss
-        """
 
+            >>> tokenizer = Wav2Vec2Tokenizer.from_pretrained("facebook/wav2vec2-base-960h")
+            >>> model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
+
+            >>> def map_to_array(batch):
+            >>>     speech, _ = sf.read(batch["file"])
+            >>>     batch["speech"] = speech
+            >>>     return batch
+
+            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+            >>> ds = ds.map(map_to_array)
+
+            >>> input_values = tokenizer(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
+            >>> logits = model(input_values).logits
+
+            >>> predicted_ids = torch.argmax(logits, dim=-1)
+            >>> transcription = tokenizer.decode(predicted_ids[0])
+        """
+        print(f'[DEBUG] In wav2vec2forctc forward. Labels: {labels}')
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.wav2vec2(
@@ -1097,14 +932,14 @@ class Wav2Vec2PerformerForCTC(Wav2Vec2PerformerPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
+        print(f'[DEBUG] in Wav2Vec2PerformerForCTC forward. Wav2Vec2Model output: {outputs}')
         hidden_states = outputs[0]
         hidden_states = self.dropout(hidden_states)
 
         logits = self.lm_head(hidden_states)
-
         loss = None
         if labels is not None:
+            print(f'[DEBUG] In wav2vec2forCTC, Labels found : {labels}')
             # retrieve loss input_lengths from attention_mask
             attention_mask = (
                 attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
@@ -1117,8 +952,7 @@ class Wav2Vec2PerformerForCTC(Wav2Vec2PerformerPreTrainedModel):
             target_lengths = labels_mask.sum(-1)
             flattened_targets = labels.masked_select(labels_mask)
 
-            # ctc_loss doesn't support fp16
-            log_probs = F.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
+            log_probs = F.log_softmax(logits, dim=-1).transpose(0, 1)
 
             with torch.backends.cudnn.flags(enabled=False):
                 loss = F.ctc_loss(
@@ -1134,6 +968,12 @@ class Wav2Vec2PerformerForCTC(Wav2Vec2PerformerPreTrainedModel):
         if not return_dict:
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
+        if (loss.isnan().any()):
+            print('Nan in loss')
+        if (logits.isnan().any()):
+            print('Nan in logits')
+        if (outputs.last_hidden_state.isnan().any()):
+            print('Nan in last_hidden_state')
 
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
