@@ -236,7 +236,7 @@ class PerformerAttention(nn.Module):
             print(f'[DEBUG] PerformerAttention:q_prime in _numerator_for_projected_queries_and_keys: {q_prime}')
             print(f'[DEBUG] PerformerAttention:k_prime_t in _numerator_for_projected_queries_and_keys:{k_prime_t}')
             print(f'[DEBUG] PerformerAttention:v in _numerator_for_projected_queries_and_keys:{v}')
-            return q_prime @ (k_prime_t @ v)
+            return torch.nan_to_num(q_prime @ (k_prime_t @ v))
 
         # Causal, during training
         if not self.use_recurrent_decoding:
